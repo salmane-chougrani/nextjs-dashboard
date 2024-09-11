@@ -4,6 +4,17 @@ import { z } from 'zod';
 import { sql } from '@vercel/postgres';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { signIn } from 'auth';
+import { AuthError } from 'next-auth';
+
+export type State = {
+    errors?: {
+        customerId?: string[];
+        amount?: string[];
+        status?: string[];
+    };
+    message?: string | null;
+};
 
 const FormSchema = z.object({
     id: z.string(),
@@ -20,15 +31,6 @@ const FormSchema = z.object({
 });
 
 const CreateInvoice = FormSchema.omit({id: true, date: true});
-
-export type State = {
-    errors?: {
-        customerId?: string[];
-        amount?: string[];
-        status?: string[];
-    };
-    message?: string | null;
-};
 
 export async function createInvoice(prevState: State, formData: FormData) {
     // Validate form using Zod
@@ -90,7 +92,7 @@ export async function updateInvoice(
     }
    
     const { customerId, amount, status } = validatedFields.data;
-    const amountInCents = amount * 100;
+    const amountInCents = amount*100;
    
     try {
       await sql`
@@ -104,7 +106,7 @@ export async function updateInvoice(
    
     revalidatePath('/dashboard/invoices');
     redirect('/dashboard/invoices');
-  }
+}
 
 export async function deleteInvoice(id: string) {
     throw new Error('Failed to Delete Invoice.');
@@ -115,4 +117,23 @@ export async function deleteInvoice(id: string) {
     } catch (error) {
         return { message: 'Database Error: Failed to Delete Invoice.' }
     }
-  }
+}
+
+export async function authenticate(
+    prevState: string | undefined,
+    formData: FormData
+) {
+    try {
+        await signIn('credentials', formData);
+    } catch (error) {
+        if (error instanceof AuthError) {
+            switch(error.type) {
+                case 'CredentialsSignin': 
+                    return 'Invalid credentials.';
+                default: 
+                    return 'Something went wrong.';    
+            }
+        }
+        throw error;
+    }
+}
